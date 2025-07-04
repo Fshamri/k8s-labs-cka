@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: env-var-pod
+  name: env-var-pod
+spec:
+  containers:
+  - env:
+    - name: MY_APP
+      value: "production"
+    - name: DEBUG
+      value: "false"
+    image: nginx
+    name: env-var-pod-nginx
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
