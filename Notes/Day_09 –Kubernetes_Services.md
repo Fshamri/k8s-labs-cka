@@ -301,6 +301,6 @@ We covered:
 ## References
 
 - [Service](https://kubernetes.io/docs/concepts/services-networking/service/)
-- [[Day 9] Establish communication channels between external services and Pods - Services](https://kubernetes.io/docs/concepts/services-networking/service/)
+- [[Day 9] Establish communication channels between external services and Pods - Services](https://ithelp.ithome.com.tw/articles/10194344)
 - [Kubernetes Services - by Vladimir Romanov](https://www.kerno.io/learn/kubernetes-services#kubernetes-services-headless-services)
 - [[Kubernetes Services: Definitions & Examples (2023)](https://kodekloud.com/blog/kubernetes-services/)
