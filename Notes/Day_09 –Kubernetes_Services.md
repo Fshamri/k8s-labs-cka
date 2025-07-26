@@ -1,61 +1,58 @@
+# Day 09 - *Basic Concept*: Service
 
-# Day 09 – **Basic Concept: Service**
+## Today's Goal
 
-## 📌 Today's Goal
-
-- Understand the **purpose of Service**
-- Learn **Types of Services**:
+- Purpose of Service
+- Types of Services
   - ClusterIP
   - NodePort
   - LoadBalancer
   - ExternalName
-  - Multi-Port & Headless Services
-- Practice with `kubectl port-forward`
+  - Special Service: Multi-Port Service & Headless Service
+- `kubectl port-forward`
 
 ---
 
-## 🤔 Why Do We Need Service?
+## Why Do We Need Service?
 
-On **Day 03**, we used **Flannel** or **Calico** as CNI to establish internal cluster networking.
+In Day 03, we used Flannel or Calico as CNI to establish a virtual network for internal communication within the cluster.
 
-When a Pod is created, it gets a virtual IP. However, this IP has two key issues:
+When a Pod is created, it is assigned a virtual IP, but this virtual IP has two fatal flaws:
 
-1. **Short lifecycle** – Pod restarts lead to IP changes.
-2. **Only accessible inside the cluster**.
+1. The life cycle of a Pod is short, and when a Pod is restarted, the IP will also change. It is obviously unrealistic to ask users to pay attention to IP changes at any time.
+2. This virtual IP can only be used within the cluster and cannot be accessed from outside.
 
-➡️ To solve this, Kubernetes provides **Service**.
-
----
-
-## 🚪 What Is a Service?
-
-A **Service** provides a stable **IP** and **DNS name** to access a group of Pods:
-
-```
-Client <--> Service IP/DNS <--> kube-proxy <--> Pod(s)
-```
-
-- Service hides Pod IP changes.
-- Supports multiple Pods behind one access point.
-- Performs load balancing.
+In order to solve these two problems, we need the help of **Service**.
 
 ---
 
-## 🔗 Endpoint
+## Service
 
-When a Service is created, Kubernetes also creates an **Endpoint**:
+The function of Service is to act as a proxy for Pod's external communication and serve as a unified interface for external access.
+
+The Service will have its own IP and domain name. When a third party wants to access the Pod behind the Service, they only need to use the Service's IP or domain name, and `kube-proxy` will help forward the traffic to the Pod behind it. In this way, you can access the service through a stable Service IP without worrying about the Pod's IP changing due to restart.
+
+In addition, it is not feasible to deploy a service with just one Pod, so we use a group of Pods (ReplicaSet, Deployment) to deploy services. A Service can not only proxy one Pod, but also a group of Pods.
+
+![Service Example](https://ithelp.ithome.com.tw/upload/images/20240827/20168692OLUrXjxT7u.png)
+
+---
+
+## Supplement: Endpoint
+
+Generally speaking, when K8s creates a Service, it also creates an Endpoint object to point to the Pod behind the Service:
 
 ```
 User <--> Service <--> Endpoint <--> Pod
 ```
 
-Service uses **Label Selectors** to target the Pods.
+A Service identifies its Pods through Labels and Selectors.
 
 ---
 
-## 🧭 Service DNS
+## Service Domain Name
 
-Service DNS format in a cluster:
+When you create a Service, K8s creates a DNS entry for internal access:
 
 ```
 <service-name>.<namespace>.svc.cluster.local
@@ -68,40 +65,42 @@ kubectl exec -it <pod-name> -n <other-namespace> -- curl web-service.dev.svc.clu
 
 ---
 
-## ⚙️ Types of Services
+## Types of Services
 
-1. ClusterIP
-2. NodePort
-3. LoadBalancer
-4. ExternalName
+According to different use cases, Services are divided into:
 
----
-
-### 🔹 ClusterIP
-
-- Default type
-- Internal-only access
-- Common for internal microservice communication
+- ClusterIP
+- NodePort
+- LoadBalancer
+- ExternalName
 
 ---
 
-### 🔹 NodePort
+### ClusterIP
 
-- Exposes a port on each node (30000–32767)
-- Access with `NodeIP:NodePort`
-
-**Terminology:**
-
-- `NodePort`: Port exposed on the node (e.g., 30010)
-- `Port`: Port the service listens on (e.g., 80)
-- `TargetPort`: Port on the Pod (e.g., 80)
+Default type. Only accessible within the cluster. Suitable for internal data communication.
 
 ---
 
-### 🔹 ExternalName
+### NodePort
 
-- Points to an **external DNS name** instead of Pods
-- Useful for accessing external services like databases
+Exposes a fixed port on each Node. External traffic accesses Pods through:
+
+```
+NodeIP:NodePort
+```
+
+![NodePort Example](https://ithelp.ithome.com.tw/upload/images/20240827/20168692llXDYys8zQ.png)
+
+- **NodePort**: Port exposed on node (range: 30000–32767)
+- **Port**: Service port (e.g., 80)
+- **TargetPort**: Pod’s port
+
+---
+
+### ExternalName
+
+Maps a Service to a DNS name.
 
 ```yaml
 apiVersion: v1
@@ -116,25 +115,25 @@ spec:
 
 ---
 
-### 🔹 LoadBalancer
+### LoadBalancer
 
-- Used in cloud environments (e.g., AWS, GCP)
-- Automatically provisions an external load balancer
+Used in cloud. External traffic is routed through a cloud LB like AWS ELB or GCP LB.
 
 ---
 
-## 🔧 Create a Service for a Deployment
+## Basic Implementation of Service
 
 ```bash
-kubectl create deploy nginx-deploy --image=nginx --port=80 --replicas=3
+kubectl create deploy nginx-deploy --image nginx --port 80 --replicas 3
 kubectl get pod --show-labels | grep nginx
 ```
 
-Label will be: `app=nginx-deploy`
+**Label** is: `app=nginx-deploy`
 
-### nginx-deploy-svc.yaml
+Create YAML file:
 
 ```yaml
+# nginx-deploy-svc.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -143,31 +142,25 @@ spec:
   selector:
     app: nginx-deploy
   ports:
-  - port: 80
-    targetPort: 80
+    - port: 80
+      targetPort: 80
 ```
 
+Apply:
 ```bash
 kubectl apply -f nginx-deploy-svc.yaml
 kubectl describe service nginx-deploy-svc
 kubectl get endpoints nginx-deploy-svc
-```
-
-Verify Pod IPs:
-```bash
 kubectl get pods -l app=nginx-deploy -o jsonpath='{.items[*].status.podIP}'
 ```
 
----
-
-## ✅ Test the Service
-
+Test Service:
 ```bash
 export SERVICE_IP=$(kubectl get svc nginx-deploy-svc -o jsonpath='{.spec.clusterIP}')
 curl $SERVICE_IP:80 --max-time 2
 ```
 
-Access from another namespace:
+From another namespace:
 ```bash
 kubectl run test --image nginx -n kube-system -- curl nginx-deploy-svc.default.svc.cluster.local
 kubectl logs -n kube-system test
@@ -175,10 +168,9 @@ kubectl logs -n kube-system test
 
 ---
 
-## 🌍 NodePort for External Access
+## Expose to Outside with NodePort
 
-Edit `nginx-deploy-svc.yaml`:
-
+Edit the YAML:
 ```yaml
 apiVersion: v1
 kind: Service
@@ -189,9 +181,9 @@ spec:
   selector:
     app: nginx-deploy
   ports:
-  - port: 80
-    targetPort: 80
-    nodePort: 30010
+    - port: 80
+      targetPort: 80
+      nodePort: 30010
 ```
 
 ```bash
@@ -201,7 +193,7 @@ curl localhost:30010 --max-time 2
 
 ---
 
-## ⚙️ Create Services via CLI
+## Tips: Create Service via CLI
 
 ```bash
 kubectl expose deploy nginx-deploy --type=NodePort --name=nginx-deploy-svc --port=80 --target-port=80
@@ -210,7 +202,7 @@ kubectl create service nodeport my-service --tcp=80:80 --node-port=30010
 
 ---
 
-## 🔁 Multi-Port Service
+## Multi-Port Service
 
 ```yaml
 apiVersion: v1
@@ -221,24 +213,22 @@ spec:
   selector:
     app.kubernetes.io/name: MyApp
   ports:
-  - name: http
-    port: 80
-    targetPort: 9376
-  - name: https
-    port: 443
-    targetPort: 9377
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 9376
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 9377
 ```
 
 ---
 
-## 🧠 Headless Service
-
-- No ClusterIP
-- Returns Pod IPs directly (used with StatefulSet)
-
-### headless-demo.yaml
+## Headless Service
 
 ```yaml
+# headless-demo.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -250,8 +240,8 @@ spec:
   selector:
     app: nginx
   ports:
-  - port: 80
-    name: web
+    - port: 80
+      name: web
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -269,11 +259,11 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx
-        ports:
-        - containerPort: 80
-          name: web
+        - name: nginx
+          image: nginx
+          ports:
+            - containerPort: 80
+              name: web
 ```
 
 ```bash
@@ -285,32 +275,32 @@ kubectl logs test2
 
 ---
 
-## 🔄 `kubectl port-forward`
-
-Allows local access to Pods or Services without exposing NodePorts.
+## `kubectl port-forward`
 
 ```bash
+kubectl run nginx --image=nginx --port=80
+kubectl expose pod nginx --port=80 --target-port=80 --name=nginx-svc
 kubectl port-forward pod/nginx 8080:80
+# OR
 kubectl port-forward svc/nginx-svc 8080:80
 curl localhost:8080
 ```
 
-Use `Ctrl + C` to stop.
+---
+
+## Today's Summary
+
+We covered:
+- Service concept and types
+- ClusterIP, NodePort, LoadBalancer, ExternalName
+- Multi-port and Headless Services
+- DNS, Endpoints, and `kubectl port-forward`
 
 ---
 
-## 📚 Summary
+## References
 
-- Services provide stable network identities for Pods
-- Types: ClusterIP, NodePort, LoadBalancer, ExternalName
-- Special types: Multi-port and Headless Services
-- Covered DNS, Endpoints, and `kubectl port-forward`
-
----
-
-## 🔗 References
-
-- [Kubernetes Services – Official Docs](https://kubernetes.io/docs/concepts/services-networking/service/)
-- [Day 9 – Services on ITHelp](https://ithelp.ithome.com.tw/)
-- Kubernetes Services by Vladimir Romanov
+- Service
+- [Day 9] Establish communication channels between external services and Pods - Services
+- Kubernetes Services - by Vladimir Romanov
 - Kubernetes Services: Definitions & Examples (2023)
